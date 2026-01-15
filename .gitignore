@@ -1,0 +1,16 @@
+# Build artifacts
+*.bin
+*.o
+*.img
+*.elf
+
+# Linker script (generated)
+linker.ld
+
+# Temporary files
+*.tmp
+*.bak
+
+# OS-specific
+.DS_Store
+Thumbs.db
