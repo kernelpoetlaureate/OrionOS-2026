@@ -1,10 +1,10 @@
 [BITS 16]
 [ORG 0x7C00]
 
-KERNEL_OFFSET equ 0x1000 ; This is where we will load our kernel
+KERNEL_OFFSET equ 0x1000
 
 start:
-    mov [BOOT_DRIVE], dl ; BIOS stores boot drive in DL, save it.
+    mov [BOOT_DRIVE], dl
 
     ; Set up stack
     xor ax, ax
@@ -13,41 +13,60 @@ start:
     mov ss, ax
     mov sp, 0x7C00
 
-    ; 1. Load the kernel from disk
-    call load_kernel
+    call load_kernel      ; 1. Load C code from disk
+    call load_memory_map  ; 2. Get RAM map from BIOS
+    call switch_to_pm     ; 3. Jump to 32-bit mode
 
-    ; 2. Switch to Protected Mode
-    call switch_to_pm
+    jmp $
 
-    jmp $ ; Should never reach here
+; --- FUNCTIONS ---
 
-%include "gdt.asm" ; You need to define your GDT segments here
+load_memory_map:
+    mov di, 0x8004          ; MEMORY_MAP_DATA
+    xor ebx, ebx
+    xor bp, bp              ; Counter
+.loop:
+    mov edx, 0x534D4150    ; 'SMAP'
+    mov eax, 0xE820
+    mov ecx, 24
+    int 0x15
+    jc .done
+    cmp eax, 0x534D4150
+    jne .done
+    add di, 24
+    inc bp
+    test ebx, ebx
+    jnz .loop
+.done:
+    mov [0x8000], bp        ; MEMORY_MAP_ENTRIES
+    ret
 
-[BITS 16]
 load_kernel:
-    mov bx, KERNEL_OFFSET ; Destination address
-    mov dh, 15            ; Number of sectors to read (increase as kernel grows)
+    mov bx, KERNEL_OFFSET
+    mov dh, 30              ; Load 30 sectors (approx 15KB)
     mov dl, [BOOT_DRIVE]
-    mov ah, 0x02          ; BIOS read sector function
+    mov ah, 0x02
     mov al, dh
-    mov ch, 0x00          ; Cylinder 0
-    mov dh, 0x00          ; Head 0
-    mov cl, 0x02          ; Sector 2 (Sector 1 is this bootloader)
+    mov ch, 0x00
+    mov dh, 0x00
+    mov cl, 0x02
     int 0x13
     ret
 
+%include "gdt.asm"
+
 [BITS 32]
 BEGIN_PM:
-    ; Now in 32-bit mode!
-    ; Set up segment registers for data
-    mov ax, 0x10 ; 0x10 is the offset of our DATA segment in GDT
+    mov ax, 0x10
     mov ds, ax
     mov ss, ax
     mov es, ax
     mov fs, ax
     mov gs, ax
+    mov ebp, 0x90000
+    mov esp, ebp
 
-    call KERNEL_OFFSET ; JUMP TO YOUR C KERNEL!
+    call KERNEL_OFFSET
     jmp $
 
 BOOT_DRIVE db 0
